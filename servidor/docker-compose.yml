@@ -1,0 +1,28 @@
+# SET Mesa — servidor de licenças
+#
+# SEPARADO DO RESTO DE PROPÓSITO: rede própria, volume próprio, banco em arquivo
+# próprio. Não encosta no n8n, na Evolution API nem em nada da SEVEN AI.
+#
+# Subir:   docker compose up -d --build
+# Ver log: docker compose logs -f
+# Parar:   docker compose down          (o volume e o banco continuam)
+
+services:
+  licencas:
+    build: .
+    container_name: setmesa-licencas
+    restart: unless-stopped
+    env_file: .env
+    # FECHADO POR PADRÃO: só a própria máquina enxerga.
+    #
+    # Para a fase de TESTE, sem domínio e sem certificado ainda, ponha
+    # BIND=0.0.0.0 no .env para conseguir acessar pelo IP da VPS.
+    # Assim que houver domínio e HTTPS, tire o BIND do .env e volte a fechar —
+    # senha de painel e saldo de cliente não podem viajar em texto aberto.
+    ports:
+      - "${BIND:-127.0.0.1}:8081:8080"
+    volumes:
+      - licencas-dados:/dados
+
+volumes:
+  licencas-dados:

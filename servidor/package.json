@@ -1,0 +1,17 @@
+{
+  "name": "setmesa-licencas",
+  "version": "1.0.0",
+  "description": "Servidor de licenças e créditos do SET Mesa",
+  "main": "src/servidor.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/servidor.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0"
+  },
+  "engines": { "node": ">=20" }
+}
