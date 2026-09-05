@@ -94,7 +94,7 @@ function selo (inst) {
   return `<span class="selo ok">${inst.saldo} venda(s)</span>`
 }
 
-function telaPainel (lista, resumo, erro) {
+function telaPainel (lista, resumo, erro, copias = []) {
   const linhas = lista.map(i => `
     <tr>
       <td><a href="/painel/instalacao/${encodeURIComponent(i.id)}">${e(i.apelido || i.id)}</a>
@@ -127,6 +127,19 @@ function telaPainel (lista, resumo, erro) {
               <th class="num">Vendido</th><th>Última consulta</th></tr>
           ${linhas}
          </table></div>`}
+
+    <h2>Cópia de segurança</h2>
+    <p class="sub">Este banco é o seu faturamento: quem comprou quanto, quem está sem saldo,
+       todo o histórico. Uma cópia é feita sozinha todo dia e ficam guardadas as 14 últimas —
+       <strong>mas na mesma máquina do original</strong>. Se o disco da VPS for embora, vão juntos.
+       Baixe de vez em quando e guarde fora dali.</p>
+    <div class="cartao">
+      ${copias.length === 0
+        ? '<p style="margin:0 0 12px">Nenhuma cópia automática ainda — a primeira sai logo após o servidor subir.</p>'
+        : `<div class="linha"><span>Cópias guardadas</span><span>${copias.length}</span></div>
+           <div class="linha"><span>Mais recente</span><span>${e(quando(copias[0].em))}</span></div>`}
+      <a href="/painel/backup"><button type="button">Baixar cópia agora</button></a>
+    </div>
 
     <h2>Trocar a senha do painel</h2>
     <p class="sub">Esta senha protege o seu faturamento. Se desconfiar que alguém viu, troque agora.

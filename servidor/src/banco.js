@@ -156,6 +156,52 @@ function resumo () {
   }
 }
 
+/**
+ * CÓPIA DE SEGURANÇA ÍNTEGRA.
+ *
+ * O banco roda em modo WAL: copiar o arquivo com `cp` pode pegar um retrato
+ * pela metade, com transações que ainda estão no diário e não no arquivo
+ * principal. O `.backup` do próprio SQLite resolve isso — ele monta uma cópia
+ * consistente mesmo com o servidor atendendo consulta no mesmo instante.
+ *
+ * Este arquivo é o faturamento: quem comprou quanto, quem está sem saldo,
+ * todo o histórico de recarga. Perder isso é perder a cobrança de todos os
+ * clientes de uma vez.
+ */
+async function copiarPara (destino) {
+  fs.mkdirSync(path.dirname(destino), { recursive: true })
+  await bd.backup(destino)
+  return { arquivo: destino, bytes: fs.statSync(destino).size }
+}
+
+const PASTA_COPIAS = path.join(path.dirname(CAMINHO), 'copias')
+
+/** Roda todo dia e guarda os últimos 14. Mais que isso é espaço à toa. */
+async function copiaDoDia (manter = 14) {
+  const dia = new Date().toISOString().slice(0, 10)
+  const destino = path.join(PASTA_COPIAS, `licencas-${dia}.db`)
+  const r = await copiarPara(destino)
+
+  const antigas = fs.readdirSync(PASTA_COPIAS)
+    .filter(n => n.startsWith('licencas-') && n.endsWith('.db'))
+    .sort()
+    .slice(0, -manter)
+  antigas.forEach(n => { try { fs.unlinkSync(path.join(PASTA_COPIAS, n)) } catch (_) {} })
+
+  return { ...r, apagadas: antigas.length }
+}
+
+function listarCopias () {
+  if (!fs.existsSync(PASTA_COPIAS)) return []
+  return fs.readdirSync(PASTA_COPIAS)
+    .filter(n => n.endsWith('.db'))
+    .map(n => {
+      const st = fs.statSync(path.join(PASTA_COPIAS, n))
+      return { nome: n, bytes: st.size, em: st.mtimeMs }
+    })
+    .sort((a, b) => b.em - a.em)
+}
+
 function lerConfig (chave) {
   const r = bd.prepare('SELECT valor FROM config WHERE chave = ?').get(chave)
   return r ? r.valor : null
@@ -168,6 +214,7 @@ function gravarConfig (chave, valor) {
 }
 
 module.exports = {
+  copiarPara, copiaDoDia, listarCopias, PASTA_COPIAS,
   lerConfig, gravarConfig,
   garantirInstalacao, registrarVisita, saldoDe, listar, buscar,
   creditar, atualizarCadastro, recargasDe, resumo, CAMINHO

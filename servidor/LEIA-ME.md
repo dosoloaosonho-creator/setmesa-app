@@ -94,14 +94,29 @@ com saldo zero. É assim que você descobre que alguém instalou.
 
 ## Guardar o banco
 
-O banco é um arquivo dentro do volume `licencas-dados`. **É o seu faturamento.**
-Cópia de segurança:
+O banco é o seu faturamento: quem comprou quanto, quem está sem saldo, todo o
+histórico de recarga. Perder isso é perder a cobrança de todos os clientes de
+uma vez.
+
+**O servidor já faz sozinho.** Uma cópia por dia, guardando as 14 últimas, em
+`/dados/copias` dentro do volume. Ela usa o mecanismo próprio do SQLite, não
+`cp` — o banco roda em modo WAL, e cópia feita com `cp` pode sair pela metade.
+
+**Mas cópia na mesma máquina do original não é cópia de segurança.** Se o disco
+da VPS for embora, os dois vão juntos. Por isso existe o botão **Baixar cópia
+agora** no painel: leve o arquivo para o seu computador ou para a nuvem que você
+usa, de tempos em tempos.
+
+Para restaurar, é só parar o container, pôr o arquivo no lugar do banco e subir
+de novo:
 
 ```bash
-docker compose exec licencas sh -c 'cat /dados/setmesa-licencas.db' > backup-$(date +%F).db
+cd /opt/setmesa-servidor/servidor
+docker compose down
+docker run --rm -v licencas-dados:/dados -v $(pwd):/aqui alpine \
+  sh -c 'cp /aqui/setmesa-licencas-AAAA-MM-DD.db /dados/setmesa-licencas.db'
+docker compose up -d
 ```
-
-Vale a pena colocar isso num cron diário e mandar para fora da VPS.
 
 ## Por que SQLite e não um banco separado
 

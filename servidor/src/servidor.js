@@ -143,7 +143,7 @@ const limiteLogin = rateLimit({ windowMs: 10 * 60 * 1000, limit: 10 })
 
 app.get('/painel', (req, res) => {
   if (!sessaoValida(req.cookies.sessao)) return res.send(painel.telaLogin(''))
-  res.send(painel.telaPainel(banco.listar(), banco.resumo()))
+  res.send(painel.telaPainel(banco.listar(), banco.resumo(), null, banco.listarCopias()))
 })
 
 app.post('/painel/entrar', limiteLogin, (req, res) => {
@@ -213,6 +213,42 @@ app.post('/painel/senha', exigirSessao, limiteLogin, (req, res) => {
   // outra sessão aberta em outro aparelho perde a validade junto.
   res.clearCookie('sessao')
   res.send(painel.telaLogin('Senha trocada. Entre com a nova.'))
+})
+
+// ---------------------------------------------------------------------------
+// CÓPIA DE SEGURANÇA
+// ---------------------------------------------------------------------------
+//
+// Roda sozinha todo dia e guarda 14. Mas cópia que só existe na mesma máquina
+// do original não é cópia de segurança de verdade: se o disco da VPS for
+// embora, os dois vão juntos. Por isso o botão de baixar no painel — leve o
+// arquivo para fora, para o seu computador ou para a nuvem que você usa.
+
+const UM_DIA = 24 * 60 * 60 * 1000
+
+async function rotinaDeCopia () {
+  try {
+    const r = await banco.copiaDoDia()
+    console.log(`copia do dia: ${r.arquivo} (${r.bytes} bytes)`)
+  } catch (e) {
+    console.error('falhou a copia do dia:', e.message)
+  }
+}
+setTimeout(rotinaDeCopia, 30 * 1000)   // uma logo depois de subir
+setInterval(rotinaDeCopia, UM_DIA)
+
+app.get('/painel/backup', exigirSessao, async (_req, res) => {
+  const dia = new Date().toISOString().slice(0, 10)
+  const temporario = require('path').join(require('os').tmpdir(), `licencas-${Date.now()}.db`)
+  try {
+    await banco.copiarPara(temporario)
+    res.download(temporario, `setmesa-licencas-${dia}.db`, () => {
+      try { require('fs').unlinkSync(temporario) } catch (_) {}
+    })
+  } catch (e) {
+    res.status(500).send(painel.telaPainel(banco.listar(), banco.resumo(),
+      'Não consegui gerar a cópia: ' + e.message))
+  }
 })
 
 app.get('/', (_req, res) => res.redirect('/painel'))
