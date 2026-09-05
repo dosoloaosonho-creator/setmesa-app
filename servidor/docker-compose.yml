@@ -23,6 +23,18 @@ services:
       - "${BIND:-127.0.0.1}:8081:8080"
     volumes:
       - licencas-dados:/dados
+    # NA MESMA REDE DO PROXY, DECLARADO AQUI (05/09/2026).
+    # Antes a ligação era feita à mão com "docker network connect". Bastou um
+    # "docker compose up -d" para fechar uma porta e o container nasceu de novo
+    # sem a ligação — o proxy parou de enxergar e o app do cliente passou a
+    # receber 502. Declarado aqui, isso não acontece mais.
+    networks:
+      - proxy
 
 volumes:
   licencas-dados:
+
+networks:
+  proxy:
+    external: true
+    name: ${REDE_PROXY:-bridge}
