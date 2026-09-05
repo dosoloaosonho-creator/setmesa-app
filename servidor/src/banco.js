@@ -53,6 +53,13 @@ bd.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_recargas_instalacao ON recargas(instalacaoId, criadoEm DESC);
+
+  -- Guarda a senha do painel depois que o Michel a troca pela tela.
+  -- Enquanto não houver nada aqui, vale a senha do .env.
+  CREATE TABLE IF NOT EXISTS config (
+    chave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL
+  );
 `)
 
 const agora = () => Date.now()
@@ -149,7 +156,19 @@ function resumo () {
   }
 }
 
+function lerConfig (chave) {
+  const r = bd.prepare('SELECT valor FROM config WHERE chave = ?').get(chave)
+  return r ? r.valor : null
+}
+
+function gravarConfig (chave, valor) {
+  bd.prepare(
+    'INSERT INTO config (chave, valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor'
+  ).run(chave, valor)
+}
+
 module.exports = {
+  lerConfig, gravarConfig,
   garantirInstalacao, registrarVisita, saldoDe, listar, buscar,
   creditar, atualizarCadastro, recargasDe, resumo, CAMINHO
 }

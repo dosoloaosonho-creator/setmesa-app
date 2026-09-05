@@ -57,6 +57,22 @@ completa, com `https://`. Exemplo: `https://licencas.seudominio.com.br`
 
 O app monta sozinho o caminho `/licenca`.
 
+## Trocar a senha do painel
+
+Direto na tela, no fim do painel: senha atual, senha nova, repetir. Trocar
+derruba todas as sessões abertas, inclusive em outros aparelhos — que é o que
+você quer se desconfiar que alguém viu a senha.
+
+A senha nova fica guardada no banco, como hash. O valor do `.env` deixa de
+valer a partir da primeira troca.
+
+**Esqueceu a senha nova?** Na VPS, isto faz voltar a valer a do `.env`:
+
+```bash
+cd /opt/setmesa-servidor/servidor
+docker compose exec licencas node -e "require('./src/banco').gravarConfig('senha_hash','')"
+```
+
 ## O dia a dia
 
 1. O cliente faz o Pix e te avisa no WhatsApp.

@@ -84,6 +84,40 @@ function assinar (valor) {
   return crypto.createHmac('sha256', SEGREDO).update(valor).digest('hex')
 }
 
+/**
+ * A SENHA DO PAINEL PODE SER TROCADA PELA TELA (Michel, 05/09/2026).
+ *
+ * Antes ela só mudava editando arquivo na VPS por SSH. Isso é inaceitável para
+ * algo que protege faturamento: se a senha vazar, a troca tem que levar trinta
+ * segundos, do celular, e não depender de terminal.
+ *
+ * Enquanto ninguém trocar, vale a senha do .env. Depois da primeira troca, vale
+ * a guardada no banco — e o .env deixa de importar.
+ *
+ * ESQUECEU A SENHA NOVA? Na VPS, isto volta a valer a do .env:
+ *   docker compose exec licencas node -e "require('./src/banco').gravarConfig('senha_hash','')"
+ */
+function embaralhar (senha, salHex) {
+  const sal = salHex || crypto.randomBytes(16).toString('hex')
+  const hash = crypto.scryptSync(senha, sal, 64).toString('hex')
+  return `scrypt$${sal}$${hash}`
+}
+
+function senhaConfere (senha) {
+  const guardada = banco.lerConfig('senha_hash')
+  if (guardada && guardada.startsWith('scrypt$')) {
+    const [, sal, esperado] = guardada.split('$')
+    const calculado = crypto.scryptSync(senha, sal, 64).toString('hex')
+    const a = Buffer.from(calculado, 'hex')
+    const b = Buffer.from(esperado, 'hex')
+    return a.length === b.length && crypto.timingSafeEqual(a, b)
+  }
+  // Ainda na senha original do .env.
+  const a = Buffer.from(String(senha), 'utf8')
+  const b = Buffer.from(SENHA, 'utf8')
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
+}
+
 function criarSessao () {
   const emitidoEm = String(Date.now())
   return `${emitidoEm}.${assinar(emitidoEm)}`
@@ -113,10 +147,9 @@ app.get('/painel', (req, res) => {
 })
 
 app.post('/painel/entrar', limiteLogin, (req, res) => {
-  const enviada = Buffer.from(String(req.body.senha || ''), 'utf8')
-  const correta = Buffer.from(SENHA, 'utf8')
-  const confere = enviada.length === correta.length && crypto.timingSafeEqual(enviada, correta)
-  if (!confere) return res.status(401).send(painel.telaLogin('Senha incorreta.'))
+  if (!senhaConfere(String(req.body.senha || ''))) {
+    return res.status(401).send(painel.telaLogin('Senha incorreta.'))
+  }
 
   res.cookie('sessao', criarSessao(), {
     httpOnly: true,
@@ -159,6 +192,27 @@ app.post('/painel/cadastro', exigirSessao, (req, res) => {
     bloqueado: req.body.bloqueado === 'on'
   })
   res.redirect('/painel/instalacao/' + encodeURIComponent(id))
+})
+
+/** Trocar a senha do painel. Exige a atual — cookie roubado não troca senha sozinho. */
+app.post('/painel/senha', exigirSessao, limiteLogin, (req, res) => {
+  const atual = String(req.body.atual || '')
+  const nova = String(req.body.nova || '')
+  const repetida = String(req.body.repetida || '')
+
+  const erro =
+    !senhaConfere(atual) ? 'Senha atual incorreta.'
+    : nova.length < 10 ? 'A senha nova precisa ter pelo menos 10 caracteres.'
+    : nova !== repetida ? 'A confirmação não bateu com a senha nova.'
+    : null
+
+  if (erro) return res.status(400).send(painel.telaPainel(banco.listar(), banco.resumo(), erro))
+
+  banco.gravarConfig('senha_hash', embaralhar(nova))
+  // Derruba a sessão: quem trocou entra de novo com a senha nova, e qualquer
+  // outra sessão aberta em outro aparelho perde a validade junto.
+  res.clearCookie('sessao')
+  res.send(painel.telaLogin('Senha trocada. Entre com a nova.'))
 })
 
 app.get('/', (_req, res) => res.redirect('/painel'))

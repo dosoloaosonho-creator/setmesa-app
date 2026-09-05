@@ -128,6 +128,19 @@ function telaPainel (lista, resumo, erro) {
           ${linhas}
          </table></div>`}
 
+    <h2>Trocar a senha do painel</h2>
+    <p class="sub">Esta senha protege o seu faturamento. Se desconfiar que alguém viu, troque agora.
+       Trocar derruba todas as sessões abertas, inclusive em outros aparelhos.</p>
+    <form method="post" action="/painel/senha" class="cartao">
+      <label for="sa">Senha atual</label>
+      <input id="sa" name="atual" type="password" autocomplete="current-password" required>
+      <label for="sn">Senha nova (mínimo 10 caracteres)</label>
+      <input id="sn" name="nova" type="password" autocomplete="new-password" minlength="10" required>
+      <label for="sr">Repita a senha nova</label>
+      <input id="sr" name="repetida" type="password" autocomplete="new-password" minlength="10" required>
+      <button type="submit">Trocar senha</button>
+    </form>
+
     <form method="post" action="/painel/sair"><button class="secundario" type="submit">Sair</button></form>`)
 }
 
