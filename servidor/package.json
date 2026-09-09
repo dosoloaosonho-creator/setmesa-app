@@ -5,7 +5,8 @@
   "main": "src/servidor.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/servidor.js"
+    "start": "node src/servidor.js",
+    "teste": "node teste/recarga.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
@@ -13,5 +14,7 @@
     "express": "^4.21.0",
     "express-rate-limit": "^7.4.0"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

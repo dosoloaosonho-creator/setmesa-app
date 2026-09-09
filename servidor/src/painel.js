@@ -158,6 +158,11 @@ function telaPainel (lista, resumo, erro, copias = []) {
 }
 
 function telaInstalacao (inst, recargas, erro) {
+  // PUBLICO_URL é o endereço por onde o cliente enxerga o servidor. Sem ele o
+  // link sai relativo, e um link relativo não serve para colar no WhatsApp.
+  const base = String(process.env.PUBLICO_URL || '').replace(/\/+$/, '')
+  const linkRecarga = `${base || 'https://SEU-ENDERECO'}/recarga/${encodeURIComponent(inst.id)}`
+
   const historico = recargas.map(r => `
     <tr>
       <td>${e(quando(r.criadoEm))}</td>
@@ -181,7 +186,15 @@ function telaInstalacao (inst, recargas, erro) {
       ${inst.versaoApp ? `<div class="linha"><span>Versão do app</span><span>${e(inst.versaoApp)}</span></div>` : ''}
     </div>
 
-    <h2>Liberar vendas</h2>
+    <h2>Link de recarga do cliente</h2>
+    <p class="sub">Mande este link uma vez pelo WhatsApp. O cliente recarrega sozinho,
+       o crédito entra sozinho, e você não precisa fazer mais nada.</p>
+    <div class="cartao">
+      <code style="word-break:break-all;display:block;padding:10px 12px;line-height:1.5">${e(linkRecarga)}</code>
+    </div>
+
+    <h2>Liberar vendas na mão</h2>
+    <p class="sub">Para cortesia, acerto ou quando o cliente pagar por fora.</p>
     <form method="post" action="/painel/creditar" class="cartao">
       <input type="hidden" name="id" value="${e(inst.id)}">
       <label for="q">Quantas vendas liberar</label>
@@ -222,4 +235,4 @@ function telaInstalacao (inst, recargas, erro) {
          </table></div>`}`)
 }
 
-module.exports = { telaLogin, telaPainel, telaInstalacao }
+module.exports = { telaLogin, telaPainel, telaInstalacao, pagina, ESTILO, reais, quando, e }

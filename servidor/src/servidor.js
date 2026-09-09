@@ -7,6 +7,9 @@ const crypto = require('crypto')
 
 const banco = require('./banco')
 const painel = require('./painel')
+const woovi = require('./woovi')
+const recarga = require('./recarga')
+const instalar = require('./instalar')
 
 const PORTA = Number(process.env.PORTA || 8080)
 const SENHA = process.env.PAINEL_SENHA || ''
@@ -22,6 +25,60 @@ if (!SENHA || !SEGREDO) {
 
 const app = express()
 app.set('trust proxy', 1)
+
+// ---------------------------------------------------------------------------
+// AVISO DE PAGAMENTO DA WOOVI — precisa vir ANTES de qualquer parser de JSON
+// ---------------------------------------------------------------------------
+//
+// A assinatura da Woovi vale sobre os BYTES BRUTOS do corpo. Se o express.json
+// abrir e refazer o JSON antes, a conferência falha sempre — e a "solução"
+// tentadora seria desligar a conferência, que é justamente o que não pode.
+// Por isso esta rota fica aqui em cima, com express.raw, e só ela.
+//
+// Sem a conferência, quem descobrisse este endereço mandava um "pago" e ganhava
+// crédito de graça. É a fechadura do faturamento.
+// ---------------------------------------------------------------------------
+
+app.post('/webhook/woovi', express.raw({ type: '*/*', limit: '64kb' }), (req, res) => {
+  const assinatura = req.get('x-webhook-signature')
+
+  if (!woovi.assinaturaConfere(req.body, assinatura)) {
+    console.warn('webhook recusado: assinatura invalida ou ausente')
+    return res.status(401).json({ ok: false })
+  }
+
+  let corpo
+  try { corpo = JSON.parse(req.body.toString('utf8')) } catch (_) {
+    return res.status(400).json({ ok: false })
+  }
+
+  // A Woovi manda um aviso de teste quando o webhook é cadastrado, e manda
+  // outros eventos além do pagamento. Responder 200 a todos evita reenvio
+  // eterno de coisa que a gente não trata.
+  if (corpo.event !== 'OPENPIX:CHARGE_COMPLETED') {
+    return res.json({ ok: true, ignorado: corpo.event || 'sem evento' })
+  }
+
+  const correlationId = String((corpo.charge && corpo.charge.correlationID) || '')
+  if (!correlationId) return res.json({ ok: true, ignorado: 'sem correlationID' })
+
+  try {
+    const r = banco.confirmarPagamento(correlationId)
+    if (r.situacao === 'creditada') {
+      console.log(`pix confirmado: ${correlationId} -> +${r.cobranca.quantidade} vendas para ${r.cobranca.instalacaoId}`)
+    } else if (r.situacao === 'repetida') {
+      console.log(`pix repetido, ja creditado antes: ${correlationId}`)
+    } else {
+      console.warn(`pix de cobranca desconhecida: ${correlationId}`)
+    }
+    // Sempre 200 quando a assinatura confere: 200 é o que faz a Woovi parar de reenviar.
+    res.json({ ok: true, situacao: r.situacao })
+  } catch (e) {
+    console.error('falhou ao confirmar pagamento:', e.message)
+    res.status(500).json({ ok: false })
+  }
+})
+
 app.use(express.json({ limit: '32kb' }))
 app.use(express.urlencoded({ extended: false, limit: '32kb' }))
 app.use(cookieParser())
@@ -251,9 +308,97 @@ app.get('/painel/backup', exigirSessao, async (_req, res) => {
   }
 })
 
+// ---------------------------------------------------------------------------
+// PÁGINA DE RECARGA DO CLIENTE
+// ---------------------------------------------------------------------------
+//
+// Aberta de propósito: o identificador da instalação já é o segredo, o mesmo
+// que protege /licenca. O pior que alguém com o link consegue fazer é pagar
+// crédito para o cliente.
+//
+// O valor NUNCA vem do formulário — só o número de vendas, e ele tem que bater
+// com um pacote cadastrado no servidor. Senão qualquer um pediria 5.000 vendas
+// por um centavo.
+// ---------------------------------------------------------------------------
+
+const limiteRecarga = rateLimit({ windowMs: 60 * 1000, limit: 20 })
+
+function instalacaoDaUrl (req, res) {
+  const id = String(req.params.id || '').trim()
+  if (!/^[A-Za-z0-9_-]{4,64}$/.test(id)) { res.status(400).send('Endereço inválido.'); return null }
+  const inst = banco.buscar(id)
+  if (!inst) {
+    res.status(404).send(painel.pagina('Não encontrado',
+      '<h1>Link não encontrado</h1><p class="sub">Confira o endereço com quem te enviou.</p>'))
+    return null
+  }
+  return inst
+}
+
+app.get('/recarga/:id', limiteRecarga, (req, res) => {
+  const inst = instalacaoDaUrl(req, res)
+  if (!inst) return
+  if (!woovi.configurado()) {
+    return res.send(painel.pagina('Recarga',
+      '<h1>Recarga automática indisponível</h1>' +
+      '<p class="sub">Fale com o suporte para recarregar por enquanto.</p>'))
+  }
+  res.send(recarga.telaEscolha(inst, req.query.erro ? String(req.query.erro).slice(0, 200) : null))
+})
+
+app.post('/recarga/:id/criar', limiteRecarga, async (req, res) => {
+  const inst = instalacaoDaUrl(req, res)
+  if (!inst) return
+
+  const pacote = recarga.acharPacote(req.body.vendas)
+  if (!pacote) {
+    return res.redirect(`/recarga/${encodeURIComponent(inst.id)}?erro=` +
+      encodeURIComponent('Pacote inválido. Escolha um da lista.'))
+  }
+
+  const correlationId = `setmesa-${inst.id}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
+
+  try {
+    const cobranca = await woovi.criarCobranca({
+      correlationID: correlationId,
+      valorCentavos: pacote.centavos,
+      comentario: `SET Mesa · ${pacote.vendas} vendas`
+    })
+    banco.registrarCobranca({
+      correlationId: cobranca.correlationID,
+      instalacaoId: inst.id,
+      quantidade: pacote.vendas,
+      valorCentavos: pacote.centavos,
+      brCode: cobranca.brCode,
+      qrCodeImage: cobranca.qrCodeImage,
+      linkPagamento: cobranca.linkPagamento
+    })
+    res.redirect(`/recarga/${encodeURIComponent(inst.id)}/c/${encodeURIComponent(cobranca.correlationID)}`)
+  } catch (e) {
+    console.error('falhou ao criar cobranca:', e.message)
+    res.redirect(`/recarga/${encodeURIComponent(inst.id)}?erro=` +
+      encodeURIComponent('Não consegui gerar o Pix agora. Tente de novo em um minuto.'))
+  }
+})
+
+app.get('/recarga/:id/c/:cid', limiteRecarga, (req, res) => {
+  const inst = instalacaoDaUrl(req, res)
+  if (!inst) return
+  const cob = banco.buscarCobranca(String(req.params.cid || ''))
+  if (!cob || cob.instalacaoId !== inst.id) {
+    return res.redirect(`/recarga/${encodeURIComponent(inst.id)}`)
+  }
+  res.send(recarga.telaCobranca(inst, cob))
+})
+
+// Página que o cliente abre no celular para instalar o app. Sem senha de
+// propósito: o endereço precisa ser curto o bastante para ditar no telefone.
+app.get('/instalar', (_req, res) => res.send(instalar.tela()))
+
 app.get('/', (_req, res) => res.redirect('/painel'))
 
 app.listen(PORTA, () => {
   console.log(`SET Mesa · servidor de licenças na porta ${PORTA}`)
   console.log(`Banco: ${banco.CAMINHO}`)
+  console.log(`Recarga automática: ${woovi.configurado() ? 'ligada (Woovi)' : 'DESLIGADA — falta WOOVI_APPID'}`)
 })

@@ -73,7 +73,65 @@ cd /opt/setmesa-servidor/servidor
 docker compose exec licencas node -e "require('./src/banco').gravarConfig('senha_hash','')"
 ```
 
-## O dia a dia
+## Recarga automática por Pix (Woovi)
+
+**É isto que acaba com o trabalho manual.** Você manda UM link para o cliente,
+uma vez na vida. Ele escolhe o pacote, paga o Pix, e o crédito entra sozinho.
+Você não confere nada, não abre o painel, não é acordado no domingo.
+
+### Ligar
+
+1. Crie a conta na Woovi e gere um **AppID** (no painel deles, em Api/Plugins).
+2. No `.env` da VPS, preencha:
+   ```
+   WOOVI_APPID=o-appid-que-voce-gerou
+   PUBLICO_URL=https://licencas.setbot.tech
+   PACOTES=500:3500,1000:7000,2000:14000,5000:35000
+   ```
+3. No painel da Woovi, cadastre o webhook apontando para:
+   `https://SEU-ENDERECO/webhook/woovi`
+4. `docker compose up -d --build`
+
+Sem `WOOVI_APPID`, a recarga automática fica desligada e o painel manual
+continua funcionando igual. Nada quebra por deixar em branco.
+
+### Usar
+
+Abra a instalação no painel: o **link de recarga do cliente** aparece lá em
+cima, pronto para copiar. Mande no WhatsApp. Acabou.
+
+### A trava que protege o faturamento
+
+O aviso de pagamento chega num endereço aberto na internet — tem que ser
+assim. **Todo aviso é conferido contra a assinatura da Woovi antes de creditar
+qualquer coisa.** Sem isso, quem descobrisse o endereço mandava um "pago" e
+ganhava crédito de graça.
+
+Duas coisas que NÃO podem ser mexidas sem entender o que fazem:
+
+- A rota `/webhook/woovi` usa `express.raw` e fica **antes** do
+  `express.json`. A assinatura vale sobre os bytes brutos; se um parser de JSON
+  passar na frente, a conferência falha sempre — e o conserto tentador seria
+  desligar a conferência. Não desligue.
+- O crédito entra dentro de uma transação que só roda se a cobrança **ainda não
+  estava paga**. A Woovi reenvia aviso; sem essa trava, o mesmo Pix creditava
+  duas ou três vezes.
+
+Os pacotes vêm do servidor, nunca do formulário do cliente. Se o valor viesse
+da tela, qualquer um pediria 5.000 vendas por um centavo.
+
+### Conferir que continua de pé
+
+```bash
+cd servidor && npm run teste
+```
+
+Prova, sem tocar na Woovi de verdade: aviso sem assinatura é recusado, aviso
+forjado é recusado, aviso com o corpo adulterado é recusado, aviso legítimo
+credita uma vez, aviso repetido não credita de novo, e o app enxerga o saldo
+novo. **Rode isso depois de qualquer mexida no servidor.**
+
+## O dia a dia, quando a recarga automática está desligada
 
 1. O cliente faz o Pix e te avisa no WhatsApp.
 2. Você abre `https://seu-endereco/painel` no celular.
@@ -91,6 +149,8 @@ com saldo zero. É assim que você descobre que alguém instalou.
 | `GET /licenca?instalacao=X&vendas=N&versao=V` | o que o app consulta |
 | `GET /saude` | conferir se está de pé, e os números do dia |
 | `/painel` | onde você libera crédito |
+| `/recarga/<instalacao>` | a página que o cliente usa para recarregar sozinho |
+| `POST /webhook/woovi` | por onde a Woovi avisa que o Pix caiu (assinatura conferida) |
 
 ## Guardar o banco
 
@@ -132,6 +192,17 @@ o resto do servidor não sabe qual banco está embaixo.
 
 - Sincronização das vendas em si (o servidor só conhece o total, não cada venda).
 - Painel do dono para ver o movimento do restaurante dele.
-- Cobrança automática. Você continua confirmando o Pix na mão.
+- Plano com teto de R$ 249 (assinatura mensal que completa o saldo sozinho).
+- Cartão recorrente (Asaas), para quem não quiser fazer Pix todo mês.
 
-Essas três coisas são o caminho da nuvem, que ainda é decisão em aberto.
+## Nunca testado
+
+A recarga automática foi provada contra uma Woovi de mentira, no teste
+automatizado. **Nenhum Pix de verdade passou por ela ainda.** O primeiro
+precisa ser um seu, de valor pequeno, com você olhando o log:
+
+```bash
+docker compose logs -f licencas
+```
+
+O que tem que aparecer: `pix confirmado: setmesa-... -> +500 vendas para ...`

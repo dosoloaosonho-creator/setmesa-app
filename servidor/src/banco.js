@@ -60,6 +60,25 @@ bd.exec(`
     chave TEXT PRIMARY KEY,
     valor TEXT NOT NULL
   );
+
+  -- RECARGA AUTOMÁTICA. Uma linha por cobrança Pix gerada.
+  -- O correlationId é nosso e é ele que liga o aviso de pagamento da Woovi de
+  -- volta à instalação certa. É chave primária de propósito: aviso repetido
+  -- não cria linha nova.
+  CREATE TABLE IF NOT EXISTS cobrancas (
+    correlationId TEXT PRIMARY KEY,
+    instalacaoId  TEXT    NOT NULL,
+    quantidade    INTEGER NOT NULL,
+    valorCentavos INTEGER NOT NULL,
+    status        TEXT    NOT NULL DEFAULT 'ABERTA',
+    brCode        TEXT    NOT NULL DEFAULT '',
+    qrCodeImage   TEXT    NOT NULL DEFAULT '',
+    linkPagamento TEXT    NOT NULL DEFAULT '',
+    criadoEm      INTEGER NOT NULL,
+    pagoEm        INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_cobrancas_instalacao ON cobrancas(instalacaoId, criadoEm DESC);
 `)
 
 const agora = () => Date.now()
@@ -213,9 +232,71 @@ function gravarConfig (chave, valor) {
   ).run(chave, valor)
 }
 
+
+// ---------------------------------------------------------------------------
+// RECARGA AUTOMÁTICA
+// ---------------------------------------------------------------------------
+
+function registrarCobranca (c) {
+  bd.prepare(
+    `INSERT INTO cobrancas
+       (correlationId, instalacaoId, quantidade, valorCentavos, status,
+        brCode, qrCodeImage, linkPagamento, criadoEm)
+     VALUES (?,?,?,?,'ABERTA',?,?,?,?)`
+  ).run(
+    c.correlationId, c.instalacaoId, Math.floor(c.quantidade),
+    Math.floor(c.valorCentavos), c.brCode || '', c.qrCodeImage || '',
+    c.linkPagamento || '', agora()
+  )
+  return buscarCobranca(c.correlationId)
+}
+
+function buscarCobranca (correlationId) {
+  return bd.prepare('SELECT * FROM cobrancas WHERE correlationId = ?').get(correlationId) || null
+}
+
+function cobrancasDe (instalacaoId, limite = 20) {
+  return bd.prepare(
+    'SELECT * FROM cobrancas WHERE instalacaoId = ? ORDER BY criadoEm DESC LIMIT ?'
+  ).all(instalacaoId, limite)
+}
+
+/**
+ * CONFIRMA O PAGAMENTO E LIBERA O CRÉDITO — uma vez só.
+ *
+ * A Woovi reenvia o aviso quando não recebe 200 na primeira tentativa, e às
+ * vezes reenvia mesmo tendo recebido. Se este trecho não fosse à prova de
+ * repetição, o mesmo Pix creditaria duas, três vezes.
+ *
+ * A trava é o próprio UPDATE: ele só altera a linha se ela AINDA NÃO estiver
+ * paga. Se mudou uma linha, este é o primeiro aviso e o crédito entra; se
+ * mudou zero, alguém já processou e a gente responde ok sem creditar de novo.
+ * Tudo dentro de uma transação, junto com o crédito.
+ */
+function confirmarPagamento (correlationId) {
+  const transacao = bd.transaction(() => {
+    const existe = bd.prepare('SELECT * FROM cobrancas WHERE correlationId = ?').get(correlationId)
+    if (!existe) return { situacao: 'desconhecida' }
+
+    const r = bd.prepare(
+      "UPDATE cobrancas SET status = 'PAGA', pagoEm = ? WHERE correlationId = ? AND status <> 'PAGA'"
+    ).run(agora(), correlationId)
+
+    if (r.changes !== 1) return { situacao: 'repetida', cobranca: existe }
+
+    creditar(
+      existe.instalacaoId, existe.quantidade, existe.valorCentavos,
+      'Recarga automática por Pix'
+    )
+    return { situacao: 'creditada', cobranca: buscarCobranca(correlationId) }
+  })
+  return transacao()
+}
+
 module.exports = {
   copiarPara, copiaDoDia, listarCopias, PASTA_COPIAS,
   lerConfig, gravarConfig,
   garantirInstalacao, registrarVisita, saldoDe, listar, buscar,
-  creditar, atualizarCadastro, recargasDe, resumo, CAMINHO
+  creditar, atualizarCadastro, recargasDe, resumo, CAMINHO,
+  registrarCobranca, buscarCobranca, cobrancasDe, confirmarPagamento
 }
