@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>SET Mesa — Entrar</title>
+<style>
+  :root { --verde:#0f3d2e; --verde2:#1c7a55; --linha:#dde4e1; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         background:var(--verde); color:#1b1b1b; min-height:100vh;
+         padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+  .caixa { max-width:420px; margin:0 auto; padding-top:48px; }
+  .marca { color:#fff; text-align:center; margin-bottom:22px; }
+  .marca h1 { margin:0; font-size:30px; letter-spacing:.5px; }
+  .marca p { margin:6px 0 0; opacity:.75; font-size:13px; }
+  .cartao { background:#fff; border-radius:16px; padding:22px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+  label { display:block; font-size:13px; font-weight:600; margin:14px 0 5px; color:#33443e; }
+  input { width:100%; font-size:16px; padding:13px; border:1px solid var(--linha);
+          border-radius:10px; background:#fbfcfc; }
+  input:focus { outline:2px solid var(--verde2); border-color:transparent; }
+  button.principal { width:100%; margin-top:20px; padding:15px; font-size:16px; font-weight:700;
+          color:#fff; background:var(--verde2); border:0; border-radius:10px; }
+  button.principal:disabled { opacity:.55; }
+  .troca { text-align:center; margin-top:16px; font-size:14px; }
+  .troca a { color:var(--verde2); font-weight:600; text-decoration:none; }
+  .erro { margin-top:14px; padding:11px 13px; border-radius:9px; background:#fdecec;
+          color:#8c1c1c; font-size:14px; display:none; }
+  .aviso { margin-top:18px; font-size:12px; line-height:1.5; color:#5d6b66; }
+  h2 { margin:0; font-size:19px; color:var(--verde); }
+</style>
+</head>
+<body>
+<div class="caixa">
+  <div class="marca">
+    <h1>SET Mesa</h1>
+    <p>Produto desenvolvido por SEVEN AI TECNOLOGIA</p>
+  </div>
+
+  <div class="cartao">
+    <h2 id="titulo">Entrar no sistema</h2>
+
+    <div id="campos-novo" style="display:none">
+      <label for="nome">Seu nome</label>
+      <input id="nome" autocomplete="name" autocapitalize="words">
+      <label for="restaurante">Nome do restaurante</label>
+      <input id="restaurante" autocapitalize="words">
+    </div>
+
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="username" autocapitalize="none" inputmode="email">
+
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password">
+
+    <div class="erro" id="erro"></div>
+    <button class="principal" id="enviar">Entrar</button>
+
+    <div class="troca">
+      <span id="texto-troca">Ainda não tem conta?</span>
+      <a href="#" id="trocar">Criar conta</a>
+    </div>
+
+    <p class="aviso">
+      O sistema roda na internet. Se a internet do restaurante cair, ele para até
+      voltar. Quem precisa trabalhar sem internet usa a versão com central Android.
+    </p>
+  </div>
+</div>
+
+<script>
+(function () {
+  var novo = false
+  var erro = document.getElementById('erro')
+  var botao = document.getElementById('enviar')
+
+  function mostrarErro (t) { erro.textContent = t; erro.style.display = t ? 'block' : 'none' }
+
+  document.getElementById('trocar').addEventListener('click', function (e) {
+    e.preventDefault()
+    novo = !novo
+    document.getElementById('campos-novo').style.display = novo ? 'block' : 'none'
+    document.getElementById('titulo').textContent = novo ? 'Criar conta' : 'Entrar no sistema'
+    botao.textContent = novo ? 'Criar conta e entrar' : 'Entrar'
+    document.getElementById('texto-troca').textContent = novo ? 'Já tem conta?' : 'Ainda não tem conta?'
+    this.textContent = novo ? 'Entrar' : 'Criar conta'
+    document.getElementById('senha').setAttribute('autocomplete', novo ? 'new-password' : 'current-password')
+    mostrarErro('')
+  })
+
+  function enviar () {
+    mostrarErro('')
+    botao.disabled = true
+    botao.textContent = 'Aguarde...'
+    var corpo = {
+      email: document.getElementById('email').value,
+      senha: document.getElementById('senha').value
+    }
+    if (novo) {
+      corpo.nome = document.getElementById('nome').value
+      corpo.restaurante = document.getElementById('restaurante').value
+    }
+    fetch(novo ? '/nuvem/criar-conta' : '/nuvem/entrar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo)
+    }).then(function (r) { return r.json() }).then(function (r) {
+      if (r.ok) { location.href = '/sistema'; return }
+      mostrarErro(r.erro || 'Não deu certo.')
+      soltar()
+    }).catch(function () {
+      mostrarErro('Sem conexão com o servidor. Confira a internet.')
+      soltar()
+    })
+  }
+
+  function soltar () {
+    botao.disabled = false
+    botao.textContent = novo ? 'Criar conta e entrar' : 'Entrar'
+  }
+
+  botao.addEventListener('click', enviar)
+  document.getElementById('senha').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') enviar()
+  })
+})()
+</script>
+</body>
+</html>

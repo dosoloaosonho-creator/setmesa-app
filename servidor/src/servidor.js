@@ -10,6 +10,8 @@ const painel = require('./painel')
 const woovi = require('./woovi')
 const recarga = require('./recarga')
 const instalar = require('./instalar')
+const demonstracao = require('./demonstracao')
+const rotasNuvem = require('./nuvem/rotas-nuvem')
 
 const PORTA = Number(process.env.PORTA || 8080)
 const SENHA = process.env.PAINEL_SENHA || ''
@@ -82,6 +84,18 @@ app.post('/webhook/woovi', express.raw({ type: '*/*', limit: '64kb' }), (req, re
 app.use(express.json({ limit: '32kb' }))
 app.use(express.urlencoded({ extended: false, limit: '32kb' }))
 app.use(cookieParser())
+
+// ---------------------------------------------------------------------------
+// SET MESA NUVEM
+// ---------------------------------------------------------------------------
+//
+// A linha de venda para quem nao tem Android: o dono entra por link, com senha,
+// e o sistema inteiro roda aqui. Banco proprio, sessao propria, rotas proprias
+// em ./nuvem — de proposito: o servidor de licencas nao pode cair porque a
+// operacao de um restaurante deu errado.
+// ---------------------------------------------------------------------------
+
+app.use(rotasNuvem)
 
 // ---------------------------------------------------------------------------
 // O ENDEREÇO QUE O APP CONSULTA
@@ -393,12 +407,55 @@ app.get('/recarga/:id/c/:cid', limiteRecarga, (req, res) => {
 
 // Página que o cliente abre no celular para instalar o app. Sem senha de
 // propósito: o endereço precisa ser curto o bastante para ditar no telefone.
-app.get('/instalar', (_req, res) => res.send(instalar.tela()))
+app.get('/instalar', (req, res) => res.send(instalar.tela(instalar.apple(req))))
 
-app.get('/', (_req, res) => res.redirect('/painel'))
+// A VITRINE. Link para mandar no WhatsApp de quem ainda não é cliente: ele
+// abre no celular dele, de qualquer marca, e mexe no sistema sem instalar nada
+// e sem precisar de uma central por perto. Dados de exemplo, nada é gravado.
+app.get('/demo', (_req, res) => res.send(demonstracao.tela()))
+
+// O ARQUIVO SAI PELO DOMÍNIO DO MICHEL, NÃO PELO DO FORNECEDOR.
+//
+// O APK mora num repositório público do GitHub porque é lá que a compilação
+// publica sozinha. Mas mandar esse endereço para um dono de restaurante é ruim
+// por três motivos: é enorme, mostra a marca de outra empresa, e prende o
+// produto a um fornecedor — se um dia o depósito mudar, todo link já entregue
+// a cliente quebra. Aqui o servidor busca o arquivo e entrega com a cara da
+// casa. O endereço que o cliente recebe nunca muda.
+app.get('/baixar', async (_req, res) => {
+  const origem = instalar.enderecoApk()
+  if (!origem) return res.status(503).send('O aplicativo ainda nao foi configurado neste servidor.')
+  try {
+    const r = await fetch(origem, { redirect: 'follow' })
+    if (!r.ok || !r.body) {
+      console.error('baixar: origem respondeu', r.status)
+      return res.status(502).send('Nao foi possivel buscar o aplicativo agora. Tente de novo em alguns minutos.')
+    }
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive')
+    res.setHeader('Content-Disposition', 'attachment; filename="SET-Mesa.apk"')
+    const tamanho = r.headers.get('content-length')
+    if (tamanho) res.setHeader('Content-Length', tamanho)
+    console.log('download do app entregue')
+    require('stream').Readable.fromWeb(r.body).pipe(res)
+  } catch (erro) {
+    console.error('baixar: falhou', erro.message)
+    res.status(502).send('Nao foi possivel buscar o aplicativo agora. Tente de novo em alguns minutos.')
+  }
+})
+
+// A RAIZ DEPENDE DE POR ONDE ENTRARAM.
+// app.setbot.tech e o endereco do CLIENTE: quem digita isso quer instalar, e
+// nao pode cair numa tela de senha. licencas.setbot.tech e o endereco do
+// MICHEL, e continua indo direto para o painel.
+app.get('/', (req, res) => {
+  const host = String(req.headers.host || '').toLowerCase()
+  if (host.startsWith('app.')) return res.send(instalar.tela(instalar.apple(req)))
+  res.redirect('/painel')
+})
 
 app.listen(PORTA, () => {
   console.log(`SET Mesa · servidor de licenças na porta ${PORTA}`)
   console.log(`Banco: ${banco.CAMINHO}`)
   console.log(`Recarga automática: ${woovi.configurado() ? 'ligada (Woovi)' : 'DESLIGADA — falta WOOVI_APPID'}`)
+  console.log('SET Mesa Nuvem: /entrar e /sistema')
 })

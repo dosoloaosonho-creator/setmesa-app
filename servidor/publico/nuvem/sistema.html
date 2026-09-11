@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>SET Mesa</title>
+<style>
+  :root { --verde:#0f3d2e; --verde2:#1c7a55; --linha:#dde4e1; --cinza:#5d6b66;
+          --fundo:#f3f6f5; --vermelho:#a02020; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--fundo); color:#1b1b1b; font-size:15px;
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         padding-bottom:calc(66px + env(safe-area-inset-bottom)); }
+  header { background:var(--verde); color:#fff; padding:calc(12px + env(safe-area-inset-top)) 14px 12px;
+           display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:20; }
+  header .casa { font-weight:700; font-size:16px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  header .saldo { font-size:12px; background:rgba(255,255,255,.16); padding:5px 9px; border-radius:20px; white-space:nowrap; }
+  header .saldo.baixo { background:#7a2020; }
+  header button { background:none; border:0; color:#fff; font-size:13px; padding:6px; }
+  main { padding:14px; max-width:760px; margin:0 auto; }
+  h2 { font-size:17px; color:var(--verde); margin:0 0 12px; }
+  .grade { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+  .mesa { background:#fff; border:1px solid var(--linha); border-radius:13px; padding:14px;
+          text-align:left; font-size:15px; font-family:inherit; color:inherit; }
+  .mesa.ocupada { border-color:var(--verde2); border-width:2px; background:#f2fbf7; }
+  .mesa b { display:block; font-size:16px; margin-bottom:3px; }
+  .mesa small { color:var(--cinza); font-size:12.5px; display:block; }
+  .mesa .valor { color:var(--verde); font-weight:700; margin-top:6px; font-size:15px; }
+  .linha { background:#fff; border:1px solid var(--linha); border-radius:11px; padding:12px;
+           margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+  .linha .cresce { flex:1; min-width:0; }
+  .linha small { color:var(--cinza); font-size:12.5px; }
+  button.acao { background:var(--verde2); color:#fff; border:0; border-radius:10px;
+                padding:13px 16px; font-size:15px; font-weight:700; font-family:inherit; }
+  button.acao:disabled { opacity:.5; }
+  button.claro { background:#fff; color:var(--verde); border:1px solid var(--verde2); }
+  button.risco { background:#fff; color:var(--vermelho); border:1px solid #e5c2c2; padding:9px 12px; font-size:13px; }
+  button.largo { width:100%; margin-top:10px; }
+  input, select { width:100%; font-size:16px; padding:12px; border:1px solid var(--linha);
+                  border-radius:9px; background:#fbfcfc; font-family:inherit; }
+  label { display:block; font-size:13px; font-weight:600; margin:12px 0 5px; color:#33443e; }
+  nav { position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--linha);
+        display:flex; padding-bottom:env(safe-area-inset-bottom); z-index:20; }
+  nav button { flex:1; background:none; border:0; padding:11px 4px; font-size:12px;
+               color:var(--cinza); font-family:inherit; }
+  nav button.ativo { color:var(--verde2); font-weight:700; }
+  nav button span { display:block; font-size:19px; margin-bottom:2px; }
+  .oculto { display:none !important; }
+  .folha { position:fixed; inset:0; background:var(--fundo); z-index:30; overflow-y:auto;
+           padding-bottom:calc(20px + env(safe-area-inset-bottom)); }
+  .folha header { background:var(--verde); }
+  .resumo { background:#fff; border:1px solid var(--linha); border-radius:13px; padding:14px; margin-bottom:14px; }
+  .resumo .par { display:flex; justify-content:space-between; padding:4px 0; }
+  .resumo .par.forte { font-size:17px; font-weight:700; color:var(--verde); border-top:1px solid var(--linha);
+                       margin-top:6px; padding-top:9px; }
+  .pessoa { background:#fff; border:1px solid var(--linha); border-radius:11px; padding:12px; margin-bottom:9px; }
+  .pessoa h3 { margin:0 0 6px; font-size:15px; color:var(--verde); display:flex; justify-content:space-between; }
+  .pessoa ul { margin:0; padding-left:17px; color:var(--cinza); font-size:13px; }
+  .pessoa .quitado { color:var(--verde2); font-weight:700; font-size:13px; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:40; display:flex; align-items:flex-end; }
+  .modal .painel { background:#fff; width:100%; max-height:88vh; overflow-y:auto;
+                   border-radius:16px 16px 0 0; padding:18px 16px calc(22px + env(safe-area-inset-bottom)); }
+  .modal h3 { margin:0 0 12px; font-size:17px; color:var(--verde); }
+  .chips { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:12px; }
+  .chip { border:1px solid var(--linha); background:#fff; border-radius:20px; padding:8px 13px;
+          font-size:14px; font-family:inherit; color:#33443e; }
+  .chip.ativo { background:var(--verde2); color:#fff; border-color:var(--verde2); font-weight:600; }
+  .aviso { background:#fdecec; color:#8c1c1c; padding:11px 13px; border-radius:9px;
+           font-size:14px; margin-bottom:12px; }
+  .vazio { text-align:center; color:var(--cinza); padding:34px 16px; font-size:14px; line-height:1.6; }
+  .pe { text-align:center; color:#9aa8a3; font-size:11px; padding:18px 0 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="casa" id="casa">SET Mesa</div>
+  <div class="saldo" id="saldo"></div>
+  <button id="sair">Sair</button>
+</header>
+
+<main>
+  <section id="aba-mesas">
+    <h2>Mesas</h2>
+    <div class="grade" id="grade-mesas"></div>
+    <button class="acao claro largo" id="nova-mesa">+ Nova mesa</button>
+  </section>
+
+  <section id="aba-cardapio" class="oculto">
+    <h2>Cardápio</h2>
+    <div id="lista-cardapio"></div>
+    <button class="acao claro largo" id="nova-categoria">+ Nova categoria</button>
+    <button class="acao largo" id="novo-item">+ Novo item</button>
+  </section>
+
+  <section id="aba-caixa" class="oculto">
+    <h2>Caixa de hoje</h2>
+    <div id="painel-caixa"></div>
+  </section>
+
+  <p class="pe">Produto desenvolvido por SEVEN AI TECNOLOGIA</p>
+</main>
+
+<nav>
+  <button class="ativo" data-aba="mesas"><span>▦</span>Mesas</button>
+  <button data-aba="cardapio"><span>≡</span>Cardápio</button>
+  <button data-aba="caixa"><span>◎</span>Caixa</button>
+</nav>
+
+<div class="folha oculto" id="folha-comanda">
+  <header>
+    <button id="voltar">‹ Voltar</button>
+    <div class="casa" id="titulo-comanda"></div>
+  </header>
+  <main>
+    <div id="corpo-comanda"></div>
+  </main>
+</div>
+
+<div id="modais"></div>
+
+<script>
+(function () {
+  'use strict'
+
+  var dados = null
+  var comandaAtual = null
+  var caixaCache = null
+
+  // ---- ferramentas -------------------------------------------------------
+  function $ (id) { return document.getElementById(id) }
+  function dinheiro (c) { return 'R$ ' + (Math.round(c || 0) / 100).toFixed(2).replace('.', ',') }
+  function seguro (t) {
+    return String(t == null ? '' : t)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  }
+
+  function pedir (caminho, corpo) {
+    var op = { headers: { 'Content-Type': 'application/json' } }
+    if (corpo !== undefined) { op.method = 'POST'; op.body = JSON.stringify(corpo) }
+    return fetch(caminho, op).then(function (r) {
+      return r.json().then(function (j) {
+        if (j && j.sair) { location.href = '/entrar'; throw new Error('sessao') }
+        if (!r.ok || !j.ok) throw new Error((j && j.erro) || 'Não deu certo.')
+        return j
+      })
+    })
+  }
+
+  function falhou (e) {
+    if (e && e.message === 'sessao') return
+    alerta(e && e.message ? e.message : 'Sem conexão com o servidor.')
+  }
+
+  // ---- modais ------------------------------------------------------------
+  function fecharModal () { $('modais').innerHTML = '' }
+
+  function modal (titulo, dentro, aoMontar) {
+    var fundo = document.createElement('div')
+    fundo.className = 'modal'
+    fundo.innerHTML = '<div class="painel"><h3>' + seguro(titulo) + '</h3>' + dentro + '</div>'
+    fundo.addEventListener('click', function (e) { if (e.target === fundo) fecharModal() })
+    $('modais').innerHTML = ''
+    $('modais').appendChild(fundo)
+    if (aoMontar) aoMontar(fundo)
+  }
+
+  function alerta (texto) {
+    modal('Atenção',
+      '<p style="margin:0 0 14px;line-height:1.5">' + seguro(texto) + '</p>' +
+      '<button class="acao largo" id="ok-alerta">Entendi</button>',
+      function (f) { f.querySelector('#ok-alerta').addEventListener('click', fecharModal) })
+  }
+
+  function perguntar (titulo, rotulo, aoConfirmar) {
+    modal(titulo,
+      '<label>' + seguro(rotulo) + '</label><input id="campo-texto" autocapitalize="words">' +
+      '<button class="acao largo" id="confirma">Salvar</button>',
+      function (f) {
+        var campo = f.querySelector('#campo-texto')
+        campo.focus()
+        f.querySelector('#confirma').addEventListener('click', function () {
+          var v = campo.value.trim()
+          if (!v) return
+          this.disabled = true
+          aoConfirmar(v)
+        })
+      })
+  }
+
+  // ---- carregar ----------------------------------------------------------
+  function carregar () {
+    return pedir('/nuvem/dados').then(function (r) {
+      dados = r
+      $('casa').textContent = r.eu.restaurante || r.eu.nome
+      var s = $('saldo')
+      if (r.credito.saldo === null) { s.textContent = ''; }
+      else {
+        s.textContent = r.credito.saldo + ' créditos'
+        s.className = 'saldo' + (r.credito.saldo <= 10 ? ' baixo' : '')
+      }
+      pintarMesas()
+      pintarCardapio()
+    }).catch(falhou)
+  }
+
+  // ---- mesas -------------------------------------------------------------
+  function pintarMesas () {
+    var grade = $('grade-mesas')
+    if (!dados.mesas.length) {
+      grade.innerHTML = '<p class="vazio">Nenhuma mesa ainda.<br>Crie a primeira aqui embaixo — ' +
+        'use o nome que o salão já usa, como "Mesa 1" ou "Balcão 2".</p>'
+      return
+    }
+    var abertas = {}
+    dados.abertas.forEach(function (c) { abertas[c.mesaId] = c })
+    grade.innerHTML = dados.mesas.map(function (m) {
+      var c = abertas[m.id]
+      return '<button class="mesa' + (c ? ' ocupada' : '') + '" data-mesa="' + m.id + '">' +
+        '<b>' + seguro(m.nome) + '</b>' +
+        (c
+          ? '<small>' + c.pessoas + (c.pessoas === 1 ? ' pessoa' : ' pessoas') + '</small>' +
+            (c.total === 0
+              ? '<span class="valor">aberta, sem pedido</span>'
+              : c.falta <= 0
+                ? '<span class="valor">✓ conta paga · fechar</span>'
+                : '<span class="valor">' + dinheiro(c.falta) + '</span>' +
+                  (c.pago > 0 ? '<small>já pago ' + dinheiro(c.pago) + '</small>' : ''))
+          : '<small>livre</small>') +
+        '</button>'
+    }).join('')
+    Array.prototype.forEach.call(grade.querySelectorAll('.mesa'), function (b) {
+      b.addEventListener('click', function () { tocarMesa(Number(b.dataset.mesa)) })
+    })
+  }
+
+  function tocarMesa (mesaId) {
+    pedir('/nuvem/comanda/abrir', { mesaId: mesaId })
+      .then(function (r) { return abrirComanda(r.comanda.id) })
+      .catch(falhou)
+  }
+
+  $('nova-mesa').addEventListener('click', function () {
+    perguntar('Nova mesa', 'Nome da mesa (ex.: Mesa 13, Balcão 2)', function (nome) {
+      pedir('/nuvem/mesa', { nome: nome }).then(function () { fecharModal(); return carregar() }).catch(falhou)
+    })
+  })
+
+  // ---- comanda -----------------------------------------------------------
+  function abrirComanda (id) {
+    return pedir('/nuvem/comanda/' + id).then(function (r) {
+      comandaAtual = r.conta
+      $('folha-comanda').classList.remove('oculto')
+      window.scrollTo(0, 0)
+      pintarComanda()
+    })
+  }
+
+  $('voltar').addEventListener('click', function () {
+    $('folha-comanda').classList.add('oculto')
+    comandaAtual = null
+    carregar()
+  })
+
+  function pintarComanda () {
+    var c = comandaAtual
+    $('titulo-comanda').textContent = c.mesa
+    var h = ''
+
+    h += '<div class="resumo">' +
+      '<div class="par"><span>Consumo</span><b>' + dinheiro(c.total) + '</b></div>' +
+      '<div class="par"><span>Já pago</span><b>' + dinheiro(c.pago) + '</b></div>' +
+      '<div class="par forte"><span>Falta</span><span>' + dinheiro(c.falta) + '</span></div>' +
+      '</div>'
+
+    h += '<button class="acao largo" id="btn-lancar">+ Lançar pedido</button>'
+
+    if (!c.pedidos.length) {
+      h += '<p class="vazio">Nada lançado ainda.<br>Toque em "Lançar pedido" e escolha de quem é cada item — ' +
+        'é assim que a conta se divide sozinha no fim.</p>'
+      // Mesa aberta sem querer não pode ficar presa ocupando o salão.
+      if (!c.pagamentos.length) {
+        h += '<button class="acao claro largo" id="btn-cancelar">Liberar a mesa (abri sem querer)</button>'
+      }
+    } else {
+      h += '<h2 style="margin-top:20px">Por cliente</h2>'
+      c.porCliente.forEach(function (p) {
+        h += '<div class="pessoa"><h3><span>' + seguro(p.cliente) + '</span><span>' + dinheiro(p.total) + '</span></h3>'
+        h += '<ul>' + p.itens.map(function (i) {
+          return '<li>' + (i.quantidade > 1 ? i.quantidade + 'x ' : '') + seguro(i.nome) +
+            ' — ' + dinheiro(i.precoCentavos * i.quantidade) +
+            ' <button class="risco" data-tira="' + i.id + '" style="padding:2px 7px;font-size:11px">tirar</button></li>'
+        }).join('') + '</ul>'
+        if (p.pago > 0) {
+          h += '<p class="quitado" style="margin:7px 0 0">' +
+            (p.falta <= 0 ? '✓ pagou tudo' : 'pagou ' + dinheiro(p.pago) + ' · falta ' + dinheiro(p.falta)) + '</p>'
+        }
+        if (p.falta > 0) {
+          h += '<button class="acao claro largo" data-recebe="' + seguro(p.cliente) +
+            '" data-valor="' + p.falta + '">Receber ' + dinheiro(p.falta) + ' de ' + seguro(p.cliente) + '</button>'
+        }
+        h += '</div>'
+      })
+
+      h += '<button class="acao largo" id="btn-receber">Receber outro valor</button>'
+      h += '<button class="acao claro largo" id="btn-fechar">Fechar a mesa</button>'
+    }
+
+    $('corpo-comanda').innerHTML = h
+    $('btn-lancar').addEventListener('click', abrirLancamento)
+    if ($('btn-receber')) $('btn-receber').addEventListener('click', function () { abrirRecebimento('', c.falta) })
+    if ($('btn-cancelar')) $('btn-cancelar').addEventListener('click', function () {
+      this.disabled = true
+      this.textContent = 'Liberando...'
+      pedir('/nuvem/comanda/' + comandaAtual.comanda.id + '/cancelar', {})
+        .then(function () {
+          $('folha-comanda').classList.add('oculto')
+          comandaAtual = null
+          carregar()
+        }).catch(falhou)
+    })
+    if ($('btn-fechar')) $('btn-fechar').addEventListener('click', fecharMesa)
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-recebe]'), function (b) {
+      b.addEventListener('click', function () {
+        abrirRecebimento(b.dataset.recebe, Number(b.dataset.valor))
+      })
+    })
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tira]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true
+        pedir('/nuvem/comanda/' + comandaAtual.comanda.id + '/remover-pedido', { pedidoId: Number(b.dataset.tira) })
+          .then(function (r) { comandaAtual = r.conta; pintarComanda() }).catch(falhou)
+      })
+    })
+  }
+
+  // ---- lançar pedido -----------------------------------------------------
+  function abrirLancamento () {
+    if (!dados.itens.length) {
+      return alerta('O cardápio está vazio. Vá em Cardápio e cadastre pelo menos uma categoria e um item.')
+    }
+    var nomes = comandaAtual.porCliente.map(function (p) { return p.cliente })
+    if (nomes.indexOf('Mesa') < 0) nomes.unshift('Mesa')
+
+    var corpo =
+      '<div class="chips" id="chips-cat"></div>' +
+      '<div id="lista-itens" style="max-height:36vh;overflow-y:auto;margin-bottom:6px"></div>' +
+      '<label>De quem é?</label>' +
+      '<div class="chips" id="chips-cli"></div>' +
+      '<input id="cliente-novo" placeholder="ou escreva um nome novo" autocapitalize="words">' +
+      '<label>Quantidade</label>' +
+      '<input id="qtd" type="number" inputmode="numeric" value="1" min="1">' +
+      '<button class="acao largo" id="confirma-lanc" disabled>Escolha um item</button>'
+
+    modal('Lançar pedido', corpo, function (f) {
+      var catAtual = dados.categorias.length ? dados.categorias[0].id : 0
+      var itemAtual = null
+      var cliente = 'Mesa'
+
+      f.querySelector('#chips-cat').innerHTML = dados.categorias.map(function (c) {
+        return '<button class="chip" data-cat="' + c.id + '">' + seguro(c.nome) + '</button>'
+      }).join('')
+      f.querySelector('#chips-cli').innerHTML = nomes.map(function (n) {
+        return '<button class="chip" data-cli="' + seguro(n) + '">' + seguro(n) + '</button>'
+      }).join('')
+
+      function pintarItens () {
+        var lista = dados.itens.filter(function (i) { return i.categoriaId === catAtual })
+        f.querySelector('#lista-itens').innerHTML = lista.length
+          ? lista.map(function (i) {
+              return '<button class="linha" style="width:100%;text-align:left;font-family:inherit;font-size:15px" data-item="' + i.id + '">' +
+                '<span class="cresce">' + seguro(i.nome) + '</span><b>' + dinheiro(i.precoCentavos) + '</b></button>'
+            }).join('')
+          : '<p class="vazio">Nenhum item nesta categoria.</p>'
+        Array.prototype.forEach.call(f.querySelectorAll('[data-item]'), function (b) {
+          b.addEventListener('click', function () {
+            itemAtual = Number(b.dataset.item)
+            Array.prototype.forEach.call(f.querySelectorAll('[data-item]'), function (o) {
+              o.style.borderColor = o === b ? '#1c7a55' : '#dde4e1'
+              o.style.background = o === b ? '#f2fbf7' : '#fff'
+            })
+            var bt = f.querySelector('#confirma-lanc')
+            bt.disabled = false
+            bt.textContent = 'Lançar na conta'
+          })
+        })
+      }
+
+      function marcarChips (seletor, ativo) {
+        Array.prototype.forEach.call(f.querySelectorAll(seletor), function (c) {
+          c.classList.toggle('ativo', c === ativo)
+        })
+      }
+
+      Array.prototype.forEach.call(f.querySelectorAll('[data-cat]'), function (b) {
+        b.addEventListener('click', function () {
+          catAtual = Number(b.dataset.cat); marcarChips('[data-cat]', b); pintarItens()
+        })
+      })
+      Array.prototype.forEach.call(f.querySelectorAll('[data-cli]'), function (b) {
+        b.addEventListener('click', function () {
+          cliente = b.dataset.cli; marcarChips('[data-cli]', b)
+          f.querySelector('#cliente-novo').value = ''
+        })
+      })
+
+      marcarChips('[data-cat]', f.querySelector('[data-cat]'))
+      marcarChips('[data-cli]', f.querySelector('[data-cli]'))
+      pintarItens()
+
+      f.querySelector('#confirma-lanc').addEventListener('click', function () {
+        if (!itemAtual) return
+        var escrito = f.querySelector('#cliente-novo').value.trim()
+        var quem = escrito || cliente
+        if (quem === 'Mesa') quem = ''
+        this.disabled = true
+        this.textContent = 'Lançando...'
+        pedir('/nuvem/comanda/' + comandaAtual.comanda.id + '/pedido', {
+          itemId: itemAtual,
+          quantidade: Number(f.querySelector('#qtd').value) || 1,
+          cliente: quem
+        }).then(function (r) {
+          comandaAtual = r.conta; fecharModal(); pintarComanda()
+        }).catch(falhou)
+      })
+    })
+  }
+
+  // ---- receber -----------------------------------------------------------
+  // O botão fecha na primeira batida. Essa trava existe porque a duplicidade de
+  // pagamento já aconteceu de verdade no app: a mesa foi recebida sete vezes.
+  function abrirRecebimento (cliente, sugestao) {
+    var formas = ['DINHEIRO', 'PIX', 'DEBITO', 'CREDITO']
+    var rotulo = { DINHEIRO: 'Dinheiro', PIX: 'Pix', DEBITO: 'Débito', CREDITO: 'Crédito' }
+    var corpo =
+      '<label>Valor recebido</label>' +
+      '<input id="valor" type="text" inputmode="decimal" value="' + (sugestao / 100).toFixed(2) + '">' +
+      '<label>Forma</label>' +
+      '<div class="chips" id="chips-forma">' + formas.map(function (f) {
+        return '<button class="chip" data-forma="' + f + '">' + rotulo[f] + '</button>'
+      }).join('') + '</div>' +
+      '<label>De quem</label>' +
+      '<input id="de-quem" value="' + seguro(cliente) + '" placeholder="Mesa" autocapitalize="words">' +
+      '<button class="acao largo" id="confirma-rec">Confirmar recebimento</button>'
+
+    modal('Receber' + (cliente ? ' de ' + cliente : ''), corpo, function (f) {
+      var forma = 'DINHEIRO'
+      Array.prototype.forEach.call(f.querySelectorAll('[data-forma]'), function (b) {
+        b.addEventListener('click', function () {
+          forma = b.dataset.forma
+          Array.prototype.forEach.call(f.querySelectorAll('[data-forma]'), function (o) {
+            o.classList.toggle('ativo', o === b)
+          })
+        })
+      })
+      f.querySelector('[data-forma]').classList.add('ativo')
+
+      f.querySelector('#confirma-rec').addEventListener('click', function () {
+        var valor = Number(String(f.querySelector('#valor').value).replace(',', '.'))
+        if (!(valor > 0)) return alerta('Digite um valor maior que zero.')
+        this.disabled = true
+        this.textContent = 'Registrando...'
+        pedir('/nuvem/comanda/' + comandaAtual.comanda.id + '/receber', {
+          valor: valor, forma: forma, cliente: f.querySelector('#de-quem').value
+        }).then(function (r) {
+          comandaAtual = r.conta; caixaCache = null; fecharModal(); pintarComanda()
+        }).catch(falhou)
+      })
+    })
+  }
+
+  function fecharMesa () {
+    var b = $('btn-fechar')
+    b.disabled = true
+    b.textContent = 'Fechando...'
+    pedir('/nuvem/comanda/' + comandaAtual.comanda.id + '/fechar', {})
+      .then(function () {
+        caixaCache = null
+        $('folha-comanda').classList.add('oculto')
+        comandaAtual = null
+        carregar()
+      })
+      .catch(function (e) {
+        b.disabled = false
+        b.textContent = 'Fechar a mesa'
+        falhou(e)
+      })
+  }
+
+  // ---- cardápio ----------------------------------------------------------
+  function pintarCardapio () {
+    var alvo = $('lista-cardapio')
+    if (!dados.categorias.length) {
+      alvo.innerHTML = '<p class="vazio">Comece criando uma categoria — ela vira uma aba do cardápio.<br>' +
+        'Exemplos: Pratos, Bebidas, Sobremesas.</p>'
+      return
+    }
+    alvo.innerHTML = dados.categorias.map(function (c) {
+      var itens = dados.itens.filter(function (i) { return i.categoriaId === c.id })
+      return '<h3 style="font-size:14px;color:#5d6b66;margin:16px 0 7px">' + seguro(c.nome) + '</h3>' +
+        (itens.length
+          ? itens.map(function (i) {
+              return '<div class="linha"><span class="cresce">' + seguro(i.nome) + '</span>' +
+                '<b>' + dinheiro(i.precoCentavos) + '</b>' +
+                '<button class="risco" data-apaga="' + i.id + '">tirar</button></div>'
+            }).join('')
+          : '<p style="color:#9aa8a3;font-size:13px;margin:0 0 6px">sem itens</p>')
+    }).join('')
+
+    Array.prototype.forEach.call(alvo.querySelectorAll('[data-apaga]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true
+        pedir('/nuvem/item/remover', { id: Number(b.dataset.apaga) }).then(carregar).catch(falhou)
+      })
+    })
+  }
+
+  $('nova-categoria').addEventListener('click', function () {
+    perguntar('Nova categoria', 'Nome (ex.: Pratos, Bebidas)', function (nome) {
+      pedir('/nuvem/categoria', { nome: nome }).then(function () { fecharModal(); return carregar() }).catch(falhou)
+    })
+  })
+
+  $('novo-item').addEventListener('click', function () {
+    if (!dados.categorias.length) return alerta('Crie uma categoria antes de cadastrar itens.')
+    modal('Novo item',
+      '<label>Categoria</label><select id="cat">' + dados.categorias.map(function (c) {
+        return '<option value="' + c.id + '">' + seguro(c.nome) + '</option>'
+      }).join('') + '</select>' +
+      '<label>Nome do item</label><input id="nome-item" autocapitalize="words">' +
+      '<label>Preço</label><input id="preco" type="text" inputmode="decimal" placeholder="0,00">' +
+      '<button class="acao largo" id="salva-item">Adicionar ao cardápio</button>',
+      function (f) {
+        f.querySelector('#salva-item').addEventListener('click', function () {
+          var nome = f.querySelector('#nome-item').value.trim()
+          var preco = Number(String(f.querySelector('#preco').value).replace(',', '.'))
+          if (!nome) return alerta('Escreva o nome do item.')
+          if (!(preco >= 0)) return alerta('Digite um preço válido.')
+          this.disabled = true
+          pedir('/nuvem/item', {
+            categoriaId: Number(f.querySelector('#cat').value), nome: nome, preco: preco
+          }).then(function () { fecharModal(); return carregar() }).catch(falhou)
+        })
+      })
+  })
+
+  // ---- caixa -------------------------------------------------------------
+  function pintarCaixa () {
+    pedir('/nuvem/caixa').then(function (r) {
+      caixaCache = r.caixa
+      var c = r.caixa
+      var rotulo = { DINHEIRO: 'Dinheiro', PIX: 'Pix', DEBITO: 'Débito', CREDITO: 'Crédito' }
+      var h = '<div class="resumo">' +
+        '<div class="par forte"><span>Recebido hoje</span><span>' + dinheiro(c.total) + '</span></div>' +
+        '<div class="par"><span>Mesas fechadas</span><b>' + c.comandasFechadas + '</b></div></div>'
+      var formas = Object.keys(c.porForma)
+      if (formas.length) {
+        h += '<div class="resumo">' + formas.map(function (f) {
+          return '<div class="par"><span>' + (rotulo[f] || f) + '</span><b>' + dinheiro(c.porForma[f]) + '</b></div>'
+        }).join('') + '</div>'
+      }
+      if (!c.pagamentos.length) {
+        h += '<p class="vazio">Nenhum recebimento hoje ainda.</p>'
+      } else {
+        h += '<h2>Recebimentos</h2>' + c.pagamentos.map(function (p) {
+          var hora = new Date(p.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          return '<div class="linha"><div class="cresce"><b>' + dinheiro(p.valorCentavos) + '</b>' +
+            '<small><br>' + seguro(p.mesa || 'Mesa') + (p.cliente ? ' · ' + seguro(p.cliente) : '') +
+            ' · ' + (rotulo[p.forma] || p.forma) + '</small></div><small>' + hora + '</small></div>'
+        }).join('')
+      }
+      $('painel-caixa').innerHTML = h
+    }).catch(falhou)
+  }
+
+  // ---- abas --------------------------------------------------------------
+  Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (o) {
+        o.classList.toggle('ativo', o === b)
+      })
+      ;['mesas', 'cardapio', 'caixa'].forEach(function (nome) {
+        $('aba-' + nome).classList.toggle('oculto', nome !== b.dataset.aba)
+      })
+      if (b.dataset.aba === 'caixa') pintarCaixa()
+      if (b.dataset.aba === 'mesas') carregar()
+      window.scrollTo(0, 0)
+    })
+  })
+
+  $('sair').addEventListener('click', function () {
+    pedir('/nuvem/sair', {}).then(function () { location.href = '/entrar' })
+      .catch(function () { location.href = '/entrar' })
+  })
+
+  // A tela volta do bolso atualizada: quem fica com o celular guardado durante
+  // o serviço não pode voltar e ver a mesa como estava meia hora atrás.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && !comandaAtual) carregar()
+  })
+
+  carregar()
+})()
+</script>
+</body>
+</html>
